@@ -2,6 +2,7 @@ import express from "express";
 import listEndpoints from "express-list-endpoints";
 import cors from "cors";
 import thoughts from "./thoughts.json";
+import mongoose from "mongoose";
 
 // Defines the port the app will run on. Defaults to 8080, but can be overridden
 // when starting the server. Example command to overwrite PORT env variable value:
@@ -13,6 +14,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const mongoURL = process.env.mongoURL || "mongodb://localhost";
+
 // Start defining your routes here
 app.get("/", (req, res) => {
   res.json({
@@ -21,6 +24,9 @@ app.get("/", (req, res) => {
   });
 });
 
+/*get paginated thoughts, e.g
+http://localhost:8080/thoughts?page=1&limit=2
+returns 2 thoughts */
 app.get("/thoughts", (req, res) => {
   const { page = 1, limit = 5 } = req.query;
 
@@ -51,6 +57,7 @@ app.get("/thoughts", (req, res) => {
 });
 */
 
+/*get thought by id */
 app.get("/thoughts/:id", (req, res) => {
   const { id } = req.params;
   const thought = thoughts.find((t) => t.id === +id);
