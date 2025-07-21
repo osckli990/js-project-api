@@ -22,8 +22,34 @@ app.get("/", (req, res) => {
 });
 
 app.get("/thoughts", (req, res) => {
+  const { page = 1, limit = 5 } = req.query;
+
+  // Convert query strings to numbers
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+
+  // Calculate starting and ending index
+  const startIndex = (pageNum - 1) * limitNum;
+  const endIndex = startIndex + limitNum;
+
+  // Slice the array
+  const paginatedThoughts = thoughts.slice(startIndex, endIndex);
+
+  // Response
+  res.json({
+    page: pageNum,
+    limit: limitNum,
+    totalThoughts: thoughts.length,
+    totalPages: Math.ceil(thoughts.length / limitNum),
+    results: paginatedThoughts,
+  });
+});
+/*
+get all thoughts
+app.get("/thoughts", (req, res) => {
   res.json(thoughts);
 });
+*/
 
 app.get("/thoughts/:id", (req, res) => {
   const { id } = req.params;
