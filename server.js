@@ -1,7 +1,7 @@
 import express from "express";
 import listEndpoints from "express-list-endpoints";
 import cors from "cors";
-import express from "express";
+import thoughts from "./thoughts.json";
 
 // Defines the port the app will run on. Defaults to 8080, but can be overridden
 // when starting the server. Example command to overwrite PORT env variable value:
