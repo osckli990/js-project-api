@@ -150,6 +150,24 @@ app.post("/thoughts", async (req, res) => {
   }
 });
 
+/*like an id, off a thought */
+app.post("/thoughts/:id/like", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const updatedThought = await Thought.findByIdAndUpdate(
+      id,
+      { $inc: { hearts: 1 } },
+      { new: true }
+    );
+    if (!updatedThought) {
+      return res.status(404).json({ error: "Thought not found" });
+    }
+    res.status(200).json(updatedThought);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 /*chnage a thought */
 app.patch("/thoughts/:id", async (req, res) => {
   const { id } = req.params;
