@@ -15,8 +15,8 @@ app.use(cors());
 app.use(express.json());
 
 /*mongoose starting code */
-const mongoURL = process.env.mongoURL || "mongodb://localhost/collection";
-mongoose.connect(mongoURL, { useNewUrlParser: true, useUnifiedTopology: true });
+const mongoURL = process.env.mongoURL;
+mongoose.connect(mongoURL);
 mongoose.Promise = Promise;
 
 const ThoughtSchema = new mongoose.Schema({
