@@ -2,6 +2,8 @@ import express from "express";
 import listEndpoints from "express-list-endpoints";
 import cors from "cors";
 import mongoose from "mongoose";
+import crypto from "crypto";
+import bcrypt from "bcrypt";
 
 // Defines the port the app will run on. Defaults to 8080, but can be overridden
 // when starting the server. Example command to overwrite PORT env variable value:
@@ -33,9 +35,33 @@ const ThoughtSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
 });
 
 const Thought = mongoose.model("Thought", ThoughtSchema);
+
+const UserSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: [true, "Username is required"],
+    unique: true,
+    minlength: 3,
+  },
+  password: {
+    type: String,
+    required: [true, "Password is required"],
+    minlength: 6,
+  },
+  accessToken: {
+    type: String,
+    default: () => crypto.randomBytes(128).toString("hex"),
+  },
+});
+
+const User = mongoose.model("User", UserSchema);
 
 // Start defining your routes here
 app.get("/", (req, res) => {
@@ -137,11 +163,11 @@ app.get("/thoughts/:id", (req, res) => {
 */
 
 /*add a thought */
-app.post("/thoughts", async (req, res) => {
+app.post("/thoughts", authenticateUser, async (req, res) => {
   const { message } = req.body;
 
   try {
-    const newThought = new Thought({ message });
+    const newThought = new Thought({ message, createdBy: req.user._id });
     const savedThought = await newThought.save();
     res.status(201).json(savedThought);
   } catch (err) {
@@ -168,44 +194,114 @@ app.post("/thoughts/:id/like", async (req, res) => {
 });
 
 /*chnage a thought */
-app.patch("/thoughts/:id", async (req, res) => {
+app.patch("/thoughts/:id", authenticateUser, async (req, res) => {
   const { id } = req.params;
   const { message } = req.body;
 
   try {
-    const updated = await Thought.findByIdAndUpdate(
-      id,
-      { message },
-      { new: true, runValidators: true }
-    );
-
-    if (!updated) {
-      return res.status(404).json({ error: "Thought not found" });
+    const thought = await Thought.findById(id);
+    if (!thought) return res.status(404).json({ error: "Thought not found" });
+    if (String(thought.createdBy) !== String(req.user._id)) {
+      return res
+        .status(403)
+        .json({ error: "You are not allowed to edit this thought" });
     }
 
-    res.json(updated);
+    thought.message = message;
+    await thought.save();
+    res.json(thought);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
 /*remove a thought */
-app.delete("/thoughts/:id", async (req, res) => {
+app.delete("/thoughts/:id", authenticateUser, async (req, res) => {
   const { id } = req.params;
 
   try {
-    const deleted = await Thought.findByIdAndDelete(id);
-
-    if (!deleted) {
-      return res.status(404).json({ error: "Thought not found" });
+    const thought = await Thought.findById(id);
+    if (!thought) return res.status(404).json({ error: "Thought not found" });
+    if (String(thought.createdBy) !== String(req.user._id)) {
+      return res
+        .status(403)
+        .json({ error: "You are not allowed to delete this thought" });
     }
 
+    await thought.deleteOne();
     res.status(204).end();
   } catch (err) {
     res.status(400).json({ error: "Invalid ID" });
   }
 });
 
+app.post("/register", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    if (!username || !password) {
+      return res
+        .status(400)
+        .json({ error: "Username and password are required" });
+    }
+
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({ error: "Username already exists" });
+    }
+
+    const salt = bcrypt.genSaltSync();
+    const hashedPassword = bcrypt.hashSync(password, salt);
+
+    const newUser = new User({ username, password: hashedPassword });
+    await newUser.save();
+
+    res.status(201).json({
+      username: newUser.username,
+      id: newUser._id,
+      accessToken: newUser.accessToken,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const user = await User.findOne({ username });
+
+    if (!user || !bcrypt.compareSync(password, user.password)) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    res.status(200).json({
+      username: user.username,
+      id: user._id,
+      accessToken: user.accessToken,
+    });
+  } catch (err) {
+    res.status(400).json({ error: "Something went wrong" });
+  }
+});
+
+/*auth middleware */
+const authenticateUser = async (req, res, next) => {
+  const accessToken = req.header("Authorization");
+
+  try {
+    const user = await User.findOne({ accessToken });
+    if (user) {
+      req.user = user;
+      next();
+    } else {
+      res.status(401).json({ error: "Please log in to access this resource" });
+    }
+  } catch (err) {
+    res.status(401).json({ error: "Invalid request" });
+  }
+};
 // Start the server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
