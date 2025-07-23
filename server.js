@@ -1,7 +1,6 @@
 import express from "express";
 import listEndpoints from "express-list-endpoints";
 import cors from "cors";
-import thoughts from "./thoughts.json";
 import mongoose from "mongoose";
 
 // Defines the port the app will run on. Defaults to 8080, but can be overridden
