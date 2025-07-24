@@ -114,18 +114,20 @@ app.get("/thoughts/:id", async (req, res) => {
 
 app.post("/thoughts", async (req, res) => {
   const { message } = req.body;
-  let createdBy = null;
-
-  const token = req.header("Authorization");
-  if (token) {
-    const user = await User.findOne({ accessToken: token });
-    if (user) createdBy = user._id;
-  }
+  const accessToken = req.header("Authorization");
 
   try {
-    const thought = new Thought({ message, createdBy });
-    const saved = await thought.save();
-    res.status(201).json(saved);
+    let createdBy = null;
+    if (accessToken) {
+      const user = await User.findOne({ accessToken });
+      if (user) {
+        createdBy = user._id;
+      }
+    }
+
+    const newThought = new Thought({ message, createdBy });
+    const savedThought = await newThought.save();
+    res.status(201).json(savedThought);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
