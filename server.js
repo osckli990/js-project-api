@@ -5,17 +5,12 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 
-// Defines the port the app will run on. Defaults to 8080, but can be overridden
-// when starting the server. Example command to overwrite PORT env variable value:
-// PORT=9000 npm start
 const port = process.env.PORT || 8080;
 const app = express();
 
-// Add middlewares to enable cors and json body parsing
 app.use(cors());
 app.use(express.json());
 
-/*mongoose starting code */
 const mongoURL = process.env.mongoURL;
 mongoose.connect(mongoURL);
 mongoose.Promise = Promise;
@@ -44,9 +39,9 @@ const ThoughtSchema = new mongoose.Schema({
 const Thought = mongoose.model("Thought", ThoughtSchema);
 
 const UserSchema = new mongoose.Schema({
-  username: {
+  email: {
     type: String,
-    required: [true, "Username is required"],
+    required: [true, "Email is required"],
     unique: true,
     minlength: 3,
   },
@@ -63,7 +58,21 @@ const UserSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", UserSchema);
 
-// Start defining your routes here
+const authenticateUser = async (req, res, next) => {
+  const accessToken = req.header("Authorization");
+  try {
+    const user = await User.findOne({ accessToken });
+    if (user) {
+      req.user = user;
+      next();
+    } else {
+      res.status(401).json({ error: "Please log in to access this resource" });
+    }
+  } catch (err) {
+    res.status(401).json({ error: "Invalid request" });
+  }
+};
+
 app.get("/", (req, res) => {
   res.json({
     message: "Welcome to Oscar's Thoughts API!",
@@ -73,7 +82,6 @@ app.get("/", (req, res) => {
 
 app.get("/thoughts", async (req, res) => {
   const { page = 1, limit = 5 } = req.query;
-
   try {
     const totalThoughts = await Thought.countDocuments();
     const thoughts = await Thought.find()
@@ -93,51 +101,8 @@ app.get("/thoughts", async (req, res) => {
   }
 });
 
-/* 
-
-get paginated thoughts, e.g
-http://localhost:8080/thoughts?page=1&limit=2
-returns 2 thoughts 
-
-app.get("/thoughts", (req, res) => {
-  const { page = 1, limit = 5 } = req.query;
-
-  // Convert query strings to numbers
-  const pageNum = parseInt(page);
-  const limitNum = parseInt(limit);
-
-  // Calculate starting and ending index
-  const startIndex = (pageNum - 1) * limitNum;
-  const endIndex = startIndex + limitNum;
-
-  // Slice the array
-  const paginatedThoughts = thoughts.slice(startIndex, endIndex);
-
-  // Response
-  res.json({
-    page: pageNum,
-    limit: limitNum,
-    totalThoughts: thoughts.length,
-    totalPages: Math.ceil(thoughts.length / limitNum),
-    results: paginatedThoughts,
-  });
-});
-
-
-r
-*/
-
-/*
-get all thoughts
-
-app.get("/thoughts", (req, res) => {
-  res.json(thoughts);
-});
-*/
-
 app.get("/thoughts/:id", async (req, res) => {
   const { id } = req.params;
-
   try {
     const thought = await Thought.findById(id);
     if (!thought) {
@@ -149,25 +114,8 @@ app.get("/thoughts/:id", async (req, res) => {
   }
 });
 
-/*
-get thought by id 
-
-app.get("/thoughts/:id", (req, res) => {
-  const { id } = req.params;
-  const thought = thoughts.find((t) => t.id === +id);
-
-  if (thought) {
-    res.json(thought);
-  } else {
-    res.status(404).json({ error: "Thought not found" });
-  }
-});
-*/
-
-/*add a thought */
 app.post("/thoughts", authenticateUser, async (req, res) => {
   const { message } = req.body;
-
   try {
     const newThought = new Thought({ message, createdBy: req.user._id });
     const savedThought = await newThought.save();
@@ -177,7 +125,6 @@ app.post("/thoughts", authenticateUser, async (req, res) => {
   }
 });
 
-/*like an id, off a thought */
 app.post("/thoughts/:id/like", async (req, res) => {
   const { id } = req.params;
   try {
@@ -195,7 +142,6 @@ app.post("/thoughts/:id/like", async (req, res) => {
   }
 });
 
-/*chnage a thought */
 app.patch("/thoughts/:id", authenticateUser, async (req, res) => {
   const { id } = req.params;
   const { message } = req.body;
@@ -204,9 +150,7 @@ app.patch("/thoughts/:id", authenticateUser, async (req, res) => {
     const thought = await Thought.findById(id);
     if (!thought) return res.status(404).json({ error: "Thought not found" });
     if (String(thought.createdBy) !== String(req.user._id)) {
-      return res
-        .status(403)
-        .json({ error: "You are not allowed to edit this thought" });
+      return res.status(403).json({ error: "Not your thought to edit" });
     }
 
     thought.message = message;
@@ -217,7 +161,6 @@ app.patch("/thoughts/:id", authenticateUser, async (req, res) => {
   }
 });
 
-/*remove a thought */
 app.delete("/thoughts/:id", authenticateUser, async (req, res) => {
   const { id } = req.params;
 
@@ -225,9 +168,7 @@ app.delete("/thoughts/:id", authenticateUser, async (req, res) => {
     const thought = await Thought.findById(id);
     if (!thought) return res.status(404).json({ error: "Thought not found" });
     if (String(thought.createdBy) !== String(req.user._id)) {
-      return res
-        .status(403)
-        .json({ error: "You are not allowed to delete this thought" });
+      return res.status(403).json({ error: "Not your thought to delete" });
     }
 
     await thought.deleteOne();
@@ -238,28 +179,26 @@ app.delete("/thoughts/:id", authenticateUser, async (req, res) => {
 });
 
 app.post("/register", async (req, res) => {
-  const { username, password } = req.body;
+  const { email, password } = req.body;
 
   try {
-    if (!username || !password) {
-      return res
-        .status(400)
-        .json({ error: "Username and password are required" });
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
     }
 
-    const existingUser = await User.findOne({ username });
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ error: "Username already exists" });
+      return res.status(400).json({ error: "Email already exists" });
     }
 
     const salt = bcrypt.genSaltSync();
     const hashedPassword = bcrypt.hashSync(password, salt);
 
-    const newUser = new User({ username, password: hashedPassword });
+    const newUser = new User({ email, password: hashedPassword });
     await newUser.save();
 
     res.status(201).json({
-      username: newUser.username,
+      email: newUser.email,
       id: newUser._id,
       accessToken: newUser.accessToken,
     });
@@ -269,17 +208,17 @@ app.post("/register", async (req, res) => {
 });
 
 app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
+  const { email, password } = req.body;
 
   try {
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ email });
 
     if (!user || !bcrypt.compareSync(password, user.password)) {
-      return res.status(401).json({ error: "Invalid username or password" });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
 
     res.status(200).json({
-      username: user.username,
+      email: user.email,
       id: user._id,
       accessToken: user.accessToken,
     });
@@ -288,23 +227,7 @@ app.post("/login", async (req, res) => {
   }
 });
 
-/*auth middleware */
-const authenticateUser = async (req, res, next) => {
-  const accessToken = req.header("Authorization");
-
-  try {
-    const user = await User.findOne({ accessToken });
-    if (user) {
-      req.user = user;
-      next();
-    } else {
-      res.status(401).json({ error: "Please log in to access this resource" });
-    }
-  } catch (err) {
-    res.status(401).json({ error: "Invalid request" });
-  }
-};
-// Start the server
+// 🚀 Start server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
