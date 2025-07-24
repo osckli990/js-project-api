@@ -36,6 +36,7 @@ const ThoughtSchema = new mongoose.Schema({
   },
 });
 
+/* */
 const Thought = mongoose.model("Thought", ThoughtSchema);
 
 const UserSchema = new mongoose.Schema({
